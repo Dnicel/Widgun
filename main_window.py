@@ -83,13 +83,19 @@ class WindowListWidget(QListWidget):
 
 
 class MiniCell(QFrame):
-    """Ячейка сетки: живое превью окна + подпись (ник), клик — активация."""
+    """Ячейка сетки: живое превью окна + подпись (ник).
+    Клик — активация; двойной клик — переименовать; ПКМ — меню редактирования."""
 
-    clicked = Signal(str)  # key
+    clicked = Signal(str)                        # key
+    rename_requested = Signal(str, str)          # key, original_title
+    hotkey_requested = Signal(str, str, object)  # key, original_title, current_number
+    icon_requested = Signal(str, str)            # key, original_title
 
-    def __init__(self, key, label_text, parent=None):
+    def __init__(self, key, label_text, original_title, hotkey_number, parent=None):
         super().__init__(parent)
         self.key = key
+        self._title = original_title
+        self._hotkey = hotkey_number
         self.setObjectName("MiniCell")
         self.setCursor(Qt.PointingHandCursor)
 
@@ -127,12 +133,31 @@ class MiniCell(QFrame):
             self.clicked.emit(self.key)
         super().mousePressEvent(event)
 
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.rename_requested.emit(self.key, self._title)
+
+    def contextMenuEvent(self, event):
+        menu = QMenu(self)
+        menu.addAction("Переключиться", lambda: self.clicked.emit(self.key))
+        menu.addSeparator()
+        menu.addAction("Переименовать…",
+                       lambda: self.rename_requested.emit(self.key, self._title))
+        menu.addAction("Горячая клавиша…",
+                       lambda: self.hotkey_requested.emit(self.key, self._title, self._hotkey))
+        menu.addAction("Иконка…",
+                       lambda: self.icon_requested.emit(self.key, self._title))
+        menu.exec(event.globalPos())
+
 
 class MiniGrid(QWidget):
     """Сетка живых превью окон. Ctrl+колесо — масштаб (как у иконок)."""
 
     ctrl_wheel = Signal(int)
     activate_requested = Signal(str)
+    rename_requested = Signal(str, str)
+    hotkey_requested = Signal(str, str, object)
+    icon_requested = Signal(str, str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -156,14 +181,19 @@ class MiniGrid(QWidget):
         columns = max(1, int(math.ceil(math.sqrt(n))))
         for idx, wd in enumerate(windows):
             hwnd = getattr(wd.get('window_object'), '_hWnd', None)
+            original_title = wd.get('title', '')
             name = wd.get('custom_name') or wd.get('formatted_title', '')
             if len(name) > 22:
                 name = name[:21] + '…'
             num = wd.get('hotkey_number')
             label = f"[{num}] {name}" if num is not None else name
-            cell = MiniCell(wd['key'], label)
-            cell.setToolTip(wd.get('custom_name') or wd.get('formatted_title', ''))
+            cell = MiniCell(wd['key'], label, original_title, num)
+            cell.setToolTip((wd.get('custom_name') or wd.get('formatted_title', ''))
+                            + "  ·  ПКМ — меню")
             cell.clicked.connect(self.activate_requested)
+            cell.rename_requested.connect(self.rename_requested)
+            cell.hotkey_requested.connect(self.hotkey_requested)
+            cell.icon_requested.connect(self.icon_requested)
             r, c = divmod(idx, columns)
             self._grid.addWidget(cell, r, c)
             self.cells[wd['key']] = (cell, hwnd)
@@ -309,6 +339,9 @@ class MainWindow(QWidget):
         self.mini_grid.ctrl_wheel.connect(
             lambda direction: self._change_icon_size(direction * ICON_STEP))
         self.mini_grid.activate_requested.connect(self._activate)
+        self.mini_grid.rename_requested.connect(self._open_rename)
+        self.mini_grid.hotkey_requested.connect(self._open_hotkey)
+        self.mini_grid.icon_requested.connect(self._open_icon)
         self.stack.addWidget(self.mini_grid)
 
         root.addWidget(self.stack, 1)
@@ -513,7 +546,9 @@ class MainWindow(QWidget):
 
     def _grid_signature(self, windows):
         return tuple(
-            (w['key'], getattr(w.get('window_object'), '_hWnd', None))
+            (w['key'], getattr(w.get('window_object'), '_hWnd', None),
+             w.get('custom_name', ''), w.get('formatted_title', ''),
+             w.get('hotkey_number'))
             for w in windows
         )
 

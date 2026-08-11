@@ -10,6 +10,7 @@
 import sys
 import traceback
 
+from PySide6.QtCore import QSharedMemory
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 import themes
@@ -18,12 +19,33 @@ from hotkey_manager import HotkeyManager
 from auto_refresh import AutoRefresher
 from main_window import MainWindow
 
+# Держим ссылку на весь срок жизни процесса (иначе сегмент освободится)
+_single_instance = None
+
+
+def _acquire_single_instance():
+    """True, если это единственный экземпляр. Иначе False (уже запущен)."""
+    global _single_instance
+    _single_instance = QSharedMemory("Widgun_single_instance_v1")
+    # На случай аварийного завершения — присоединяемся и чистим осиротевший сегмент
+    if _single_instance.attach():
+        _single_instance.detach()
+    return _single_instance.create(1)
+
 
 def main():
     app = QApplication(sys.argv)
     app.setApplicationName("Widgun")
     # Панель может «жить» в трее со скрытым окном — не выходим автоматически
     app.setQuitOnLastWindowClosed(False)
+
+    # Один экземпляр: второй запуск не должен вешать второй хук клавиатуры
+    if not _acquire_single_instance():
+        QMessageBox.information(
+            None, "Widgun",
+            "Widgun уже запущен (возможно, свёрнут в трей).\n"
+            "Верни его хоткеем сворачивания или кликом по иконке в трее.")
+        sys.exit(0)
 
     try:
         # Логика

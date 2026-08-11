@@ -7,7 +7,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QLineEdit,
-    QPushButton, QButtonGroup, QFileDialog, QCheckBox, QSlider, QSpinBox,
+    QPushButton, QButtonGroup, QFileDialog, QCheckBox,
     QGroupBox, QComboBox, QListWidget, QStackedWidget, QWidget, QMessageBox,
 )
 
@@ -241,26 +241,6 @@ class SettingsDialog(QDialog):
         self.feedback_cb.setChecked(s.get('feedback_enabled', True))
         form.addWidget(self.feedback_cb)
 
-        delay_row = QHBoxLayout()
-        delay_row.addWidget(QLabel("Задержка переключения:"))
-        self.delay_slider = QSlider(Qt.Horizontal)
-        self.delay_slider.setRange(0, 10)
-        self.delay_slider.setValue(int(round(s.get('switch_delay', 0.5) * 10)))
-        self.delay_value = QLabel(); self.delay_value.setObjectName("Accent")
-        self.delay_slider.valueChanged.connect(
-            lambda v: self.delay_value.setText(f"{v / 10:.1f} сек"))
-        self.delay_value.setText(f"{self.delay_slider.value() / 10:.1f} сек")
-        delay_row.addWidget(self.delay_slider, 1)
-        delay_row.addWidget(self.delay_value)
-        form.addLayout(delay_row)
-
-        max_row = QHBoxLayout()
-        max_row.addWidget(QLabel("Макс. окон для хоткеев:"))
-        self.max_spin = QSpinBox(); self.max_spin.setRange(1, 20)
-        self.max_spin.setValue(int(s.get('max_windows', 10)))
-        max_row.addWidget(self.max_spin); max_row.addStretch(1)
-        form.addLayout(max_row)
-
         tray_row = QHBoxLayout()
         tray_row.addWidget(QLabel("Хоткей сворачивания в трей:"))
         self.tray_edit = QLineEdit(s.get('tray_hotkey', '<ctrl>+<f9>'))
@@ -384,8 +364,6 @@ class SettingsDialog(QDialog):
             'enabled': self.enabled_cb.isChecked(),
             'use_shift': self.shift_cb.isChecked(),
             'feedback_enabled': self.feedback_cb.isChecked(),
-            'switch_delay': self.delay_slider.value() / 10,
-            'max_windows': self.max_spin.value(),
             'tray_hotkey': tray_hotkey,
         })
         # Вид

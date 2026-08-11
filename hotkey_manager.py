@@ -1,15 +1,15 @@
 """
-Глобальные горячие клавиши (pynput).
+Глобальные горячие клавиши (pynput), матчинг по vk-кодам.
 
-Режимы: простые цифры 0-9 или Shift+цифры. Слушатель работает в отдельном
-потоке даже когда окно приложения свёрнуто. О нажатии сообщаем в GUI-поток
-через сигнал Qt hotkey_activated(int) — Qt сам ставит вызов в очередь главного
-потока (queued connection), поэтому активация окна происходит безопасно.
+Простые цифры 0-9 или Shift+цифры переключают окна; Ctrl+стрелки меняют размер;
+настраиваемый хоткей сворачивает в трей. Сравнение идёт по «физическим» клавишам
+(vk), а не по символам — поэтому Shift+цифра работает независимо от раскладки
+(в отличие от подхода через GlobalHotKeys, где «1» под Shift приходит как «!»).
+
+О срабатывании сообщаем в GUI-поток сигналами Qt (queued connection).
 """
 
 import json
-import threading
-import time
 
 from pynput import keyboard
 from PySide6.QtCore import QObject, Signal
@@ -17,123 +17,176 @@ from PySide6.QtCore import QObject, Signal
 from paths import HOTKEY_SETTINGS_FILE, ensure_config_dir
 
 
+# vk-коды цифр (верхний ряд и numpad)
+_DIGIT_VK = {0x31: 1, 0x32: 2, 0x33: 3, 0x34: 4, 0x35: 5,
+             0x36: 6, 0x37: 7, 0x38: 8, 0x39: 9, 0x30: 0}
+_NUMPAD_VK = {0x61: 1, 0x62: 2, 0x63: 3, 0x64: 4, 0x65: 5,
+              0x66: 6, 0x67: 7, 0x68: 8, 0x69: 9, 0x60: 0}
+
+
+def _mod_set(names):
+    s = set()
+    for n in names:
+        k = getattr(keyboard.Key, n, None)
+        if k is not None:
+            s.add(k)
+    return s
+
+
+_CTRL = _mod_set(['ctrl', 'ctrl_l', 'ctrl_r'])
+_SHIFT = _mod_set(['shift', 'shift_l', 'shift_r'])
+_ALT = _mod_set(['alt', 'alt_l', 'alt_r', 'alt_gr'])
+
+
+def _key_vk(key):
+    """vk клавиши (для Key берём из value, для KeyCode — напрямую)."""
+    if isinstance(key, keyboard.Key):
+        return getattr(key.value, 'vk', None)
+    return getattr(key, 'vk', None)
+
+
+def _parse_combo(combo):
+    """'<ctrl>+<f9>' -> (frozenset({'ctrl'}), vk) либо None (напр. для букв)."""
+    try:
+        keys = keyboard.HotKey.parse(combo)
+    except Exception:
+        return None
+    mods = set()
+    main_vk = None
+    for k in keys:
+        if k in _CTRL:
+            mods.add('ctrl')
+        elif k in _SHIFT:
+            mods.add('shift')
+        elif k in _ALT:
+            mods.add('alt')
+        else:
+            main_vk = _key_vk(k)
+    if main_vk is None:
+        return None
+    return (frozenset(mods), main_vk)
+
+
 class HotkeyManager(QObject):
-    # Нажата цифра-хоткей (0-9). Обрабатывается в GUI-потоке.
-    hotkey_activated = Signal(int)
-    # Нажат хоткей сворачивания/разворачивания в трей.
-    toggle_visibility_requested = Signal()
-    # Изменение размера иконок: +1 больше / -1 меньше.
-    icon_size_step_requested = Signal(int)
+    hotkey_activated = Signal(int)            # нажата цифра-хоткей (0-9)
+    toggle_visibility_requested = Signal()    # хоткей трея
+    icon_size_step_requested = Signal(int)    # +1 больше / -1 меньше
 
     def __init__(self, window_logic):
         super().__init__()
         self.window_logic = window_logic
 
         self.hotkey_listener = None
-        self.listener_thread = None
-        self.stop_event = threading.Event()
+        self._mods = set()
+        self._combos = []   # список (frozenset(mods), vk, action)
 
         self.default_settings = {
             'enabled': True,
-            'max_windows': 10,
             'feedback_enabled': True,
-            'minimize_on_hotkey': False,
-            'switch_delay': 0.5,
             'use_shift': False,
-            # ВАЖНО: на Windows pynput НЕ ловит Ctrl+<буква> (буква под Ctrl
-            # приходит как управляющий символ). Надёжны только спец-клавиши
-            # (функциональные, стрелки и т.п.) — поэтому дефолт с <f9>.
+            # С Ctrl надёжны только спец-клавиши (не буквы) — дефолт с <f9>.
             'tray_hotkey': '<ctrl>+<f9>',
         }
         self.settings = self.default_settings.copy()
         self.load_settings()
         self.enabled = self.settings.get('enabled', True)
-        # Материализуем hotkey_settings.json на первом запуске
         if not HOTKEY_SETTINGS_FILE.exists():
             self.save_settings()
 
     # ========== ЖИЗНЕННЫЙ ЦИКЛ СЛУШАТЕЛЯ ==========
 
     def start(self):
-        """Запустить слушатель, если включён."""
         if self.enabled:
             self._start_listener()
 
     def _start_listener(self):
-        if self.enabled and (self.listener_thread is None or not self.listener_thread.is_alive()):
-            self.stop_event.clear()
-            self.listener_thread = threading.Thread(
-                target=self._hotkey_listener_worker, daemon=True
-            )
-            self.listener_thread.start()
+        if self.hotkey_listener is not None:
+            return
+        self._rebuild_combos()
+        self._mods = set()
+        self.hotkey_listener = keyboard.Listener(
+            on_press=self._on_press, on_release=self._on_release)
+        self.hotkey_listener.start()
 
     def _stop_listener(self):
-        self.stop_event.set()
         if self.hotkey_listener:
             try:
                 self.hotkey_listener.stop()
             except Exception:
                 pass
             self.hotkey_listener = None
-        if self.listener_thread and self.listener_thread.is_alive():
-            self.listener_thread.join(timeout=1.0)
 
     def stop(self):
-        """Полная остановка (при выходе из приложения)."""
         self._stop_listener()
         self.enabled = False
 
     def restart(self):
-        """Перезапуск слушателя с текущими настройками."""
         self._stop_listener()
-        time.sleep(0.2)
         if self.enabled:
             self._start_listener()
 
-    # ========== РАБОЧИЙ ПОТОК ==========
+    # ========== МАТЧИНГ ==========
 
-    def _hotkey_listener_worker(self):
-        use_shift = self.settings.get('use_shift', False)
+    def _rebuild_combos(self):
+        """Пересобрать назначаемые комбо (трей, размер иконок)."""
+        self._combos = []
+        tray = _parse_combo(self.settings.get('tray_hotkey', '').strip())
+        if tray:
+            self._combos.append((tray[0], tray[1], self._on_toggle))
+        up = _parse_combo('<ctrl>+<up>')
+        down = _parse_combo('<ctrl>+<down>')
+        self._combos.append((up[0], up[1], lambda: self.icon_size_step_requested.emit(1)))
+        self._combos.append((down[0], down[1], lambda: self.icon_size_step_requested.emit(-1)))
 
-        # digit: 1..9 -> цифра, 0 -> десятый слот
-        hotkeys = {}
-        for digit in list(range(1, 10)) + [0]:
-            combo = f'<shift>+{digit}' if use_shift else str(digit)
-            hotkeys[combo] = (lambda d=digit: self._on_hotkey(d))
-
-        # Хоткей сворачивания в трей — добавляем только если он валиден,
-        # чтобы кривая комбинация не уронила весь набор хоткеев.
-        tray_combo = self.settings.get('tray_hotkey', '').strip()
-        if tray_combo and self.is_valid_hotkey(tray_combo):
-            hotkeys[tray_combo] = (lambda: self._on_toggle())
-
-        # Размер иконок — глобально, через спец-клавиши (стрелки надёжны с Ctrl)
-        hotkeys['<ctrl>+<up>'] = (lambda: self.icon_size_step_requested.emit(1))
-        hotkeys['<ctrl>+<down>'] = (lambda: self.icon_size_step_requested.emit(-1))
-
+    def _on_press(self, key):
         try:
-            self.hotkey_listener = keyboard.GlobalHotKeys(hotkeys)
-            with self.hotkey_listener as h:
-                h.join()
-        except Exception as e:
-            print(f"Ошибка GlobalHotKeys: {e}")
+            if key in _CTRL:
+                self._mods.add('ctrl'); return
+            if key in _SHIFT:
+                self._mods.add('shift'); return
+            if key in _ALT:
+                self._mods.add('alt'); return
 
-    def _on_hotkey(self, digit):
-        """Вызывается из потока pynput — просто эмитим сигнал в GUI-поток."""
-        self.hotkey_activated.emit(digit)
+            vk = _key_vk(key)
+            if vk is None:
+                return
+            mods = frozenset(self._mods)
+
+            # 1) назначаемые комбо (трей / размер иконок)
+            for cmods, cvk, action in self._combos:
+                if vk == cvk and mods == cmods:
+                    action()
+                    return
+
+            # 2) цифры-переключатели
+            digit = _DIGIT_VK.get(vk)
+            if digit is None:
+                digit = _NUMPAD_VK.get(vk)
+            if digit is not None:
+                if self.settings.get('use_shift', False):
+                    if mods == frozenset({'shift'}):
+                        self.hotkey_activated.emit(digit)
+                else:
+                    if not mods:
+                        self.hotkey_activated.emit(digit)
+        except Exception as e:
+            print(f"Ошибка обработки хоткея: {e}")
+
+    def _on_release(self, key):
+        if key in _CTRL:
+            self._mods.discard('ctrl')
+        elif key in _SHIFT:
+            self._mods.discard('shift')
+        elif key in _ALT:
+            self._mods.discard('alt')
 
     def _on_toggle(self):
-        """Хоткей трея — эмитим сигнал переключения видимости в GUI-поток."""
         self.toggle_visibility_requested.emit()
 
     @staticmethod
     def is_valid_hotkey(combo):
-        """Проверить, что строка-комбо парсится pynput (например '<ctrl>+<shift>+s')."""
-        try:
-            keyboard.HotKey.parse(combo)
-            return True
-        except Exception:
-            return False
+        """Комбо валидно, если парсится и заканчивается спец-клавишей (есть vk)."""
+        return _parse_combo(combo) is not None
 
     # ========== НАСТРОЙКИ ==========
 
