@@ -1,3 +1,4 @@
+# RU 
 # Widgun
 
 Панель для Windows: быстро переключаться между окнами игры **Haven & Hearth**.
@@ -26,3 +27,36 @@
 | `F2` / `F3` | Настройки / обновить список (когда панель активна) |
 
 В настройках можно включить режим **`Shift` + цифра** (чтобы цифры срабатывали только с Shift).
+
+#EN
+
+# Widgun
+
+A Windows panel for quickly switching between **Haven & Hearth** game windows.
+
+## How to use
+- The list shows your open game windows. **Click a name/icon to switch** to that window.
+- **Digits `1`–`9`, `0`** switch to the window with that number — work globally, even when the panel is hidden.
+- Row buttons: `▲`/`▼` — reorder, `🎨` — icon, `⌨` — assign a number, `✎` — rename.
+- Drag the title bar to move, drag any edge to resize. The `—` button minimizes to tray.
+
+## Modes (Settings → Appearance)
+- **Full** — icon + name + buttons.
+- **Light** — names only.
+- **Mini window** — a grid of **live previews** of all windows. Click to switch; **right-click a preview** for rename / hotkey / icon; double-click to rename.
+
+## Themes
+Settings → Appearance → Theme: black / white / orange.
+
+## Hotkeys
+| Key | Action |
+|---|---|
+| `1`…`9`, `0` | Switch to the window with that number |
+| `Ctrl + ↑` / `Ctrl + ↓` | Bigger / smaller previews and icons |
+| `Ctrl + wheel` | Same, with the mouse |
+| `Ctrl + F9` | Minimize to tray / restore |
+| `F2` / `F3` | Settings / refresh the list (when the panel is focused) |
+
+Settings also has a **`Shift` + digit** mode (so digits only fire while Shift is held).
+
+## Run
