@@ -58,5 +58,3 @@ Settings → Appearance → Theme: black / white / orange.
 | `F2` / `F3` | Settings / refresh the list (when the panel is focused) |
 
 Settings also has a **`Shift` + digit** mode (so digits only fire while Shift is held).
-
-## Run
