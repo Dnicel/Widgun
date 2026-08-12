@@ -7,6 +7,7 @@
 здесь только сборка UI и запуск.
 """
 
+import json
 import sys
 import traceback
 
@@ -14,6 +15,9 @@ from PySide6.QtCore import QSharedMemory
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 import themes
+import i18n
+from i18n import t
+from paths import SETTINGS_FILE
 from window_logic import WindowLogic
 from hotkey_manager import HotkeyManager
 from auto_refresh import AutoRefresher
@@ -21,6 +25,16 @@ from main_window import MainWindow
 
 # Держим ссылку на весь срок жизни процесса (иначе сегмент освободится)
 _single_instance = None
+
+
+def _init_language():
+    """Установить язык из settings.json ещё до создания окна."""
+    try:
+        if SETTINGS_FILE.exists():
+            with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
+                i18n.set_language(json.load(f).get('language', i18n.DEFAULT_LANG))
+    except Exception:
+        pass
 
 
 def _acquire_single_instance():
@@ -38,13 +52,11 @@ def main():
     app.setApplicationName("Widgun")
     # Панель может «жить» в трее со скрытым окном — не выходим автоматически
     app.setQuitOnLastWindowClosed(False)
+    _init_language()
 
     # Один экземпляр: второй запуск не должен вешать второй хук клавиатуры
     if not _acquire_single_instance():
-        QMessageBox.information(
-            None, "Widgun",
-            "Widgun уже запущен (возможно, свёрнут в трей).\n"
-            "Верни его хоткеем сворачивания или кликом по иконке в трее.")
+        QMessageBox.information(None, "Widgun", t('app.already_running'))
         sys.exit(0)
 
     try:

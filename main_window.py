@@ -29,6 +29,8 @@ from dialogs import RenameDialog, HotkeyDialog, IconDialog, SettingsDialog
 from feedback_overlay import FeedbackOverlay
 from window_capture import WindowCaptureManager
 import themes
+import i18n
+from i18n import t
 
 ICON_DEFAULT, ICON_MIN, ICON_MAX = 48, 16, 256
 ICON_STEP = 8
@@ -139,13 +141,13 @@ class MiniCell(QFrame):
 
     def contextMenuEvent(self, event):
         menu = QMenu(self)
-        menu.addAction("Переключиться", lambda: self.clicked.emit(self.key))
+        menu.addAction(t('mini.switch'), lambda: self.clicked.emit(self.key))
         menu.addSeparator()
-        menu.addAction("Переименовать…",
+        menu.addAction(t('mini.rename'),
                        lambda: self.rename_requested.emit(self.key, self._title))
-        menu.addAction("Горячая клавиша…",
+        menu.addAction(t('mini.hotkey'),
                        lambda: self.hotkey_requested.emit(self.key, self._title, self._hotkey))
-        menu.addAction("Иконка…",
+        menu.addAction(t('mini.icon'),
                        lambda: self.icon_requested.emit(self.key, self._title))
         menu.exec(event.globalPos())
 
@@ -189,7 +191,7 @@ class MiniGrid(QWidget):
             label = f"[{num}] {name}" if num is not None else name
             cell = MiniCell(wd['key'], label, original_title, num)
             cell.setToolTip((wd.get('custom_name') or wd.get('formatted_title', ''))
-                            + "  ·  ПКМ — меню")
+                            + t('mini.tooltip_suffix'))
             cell.clicked.connect(self.activate_requested)
             cell.rename_requested.connect(self.rename_requested)
             cell.hotkey_requested.connect(self.hotkey_requested)
@@ -232,15 +234,19 @@ class TitleBar(QFrame):
         min_btn = QPushButton("—")
         min_btn.setObjectName("MinimizeButton")
         min_btn.setCursor(Qt.PointingHandCursor)
-        min_btn.setToolTip("Свернуть в трей")
+        min_btn.setToolTip(t('titlebar.min_tooltip'))
         min_btn.clicked.connect(window.hide_to_tray)
         layout.addWidget(min_btn)
+        self.min_btn = min_btn
 
         close_btn = QPushButton("✕")
         close_btn.setObjectName("CloseButton")
         close_btn.setCursor(Qt.PointingHandCursor)
         close_btn.clicked.connect(window.close)
         layout.addWidget(close_btn)
+
+    def retranslate(self):
+        self.min_btn.setToolTip(t('titlebar.min_tooltip'))
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -258,6 +264,8 @@ class MainWindow(QWidget):
         self.auto_refresher = None
 
         self.app_settings = self._load_settings()
+        self.language = self.app_settings.get('language', i18n.DEFAULT_LANG)
+        i18n.set_language(self.language)
         self.show_icons = bool(self.app_settings.get('show_icons', True))
         self.theme = self.app_settings.get('theme', 'black')
         self.view_mode = self._resolve_view_mode()
@@ -320,7 +328,8 @@ class MainWindow(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        root.addWidget(TitleBar(self))
+        self.title_bar = TitleBar(self)
+        root.addWidget(self.title_bar)
 
         # Стек: страница со списком (полный/лайт) и страница мини-окна
         self.stack = QStackedWidget()
@@ -400,17 +409,18 @@ class MainWindow(QWidget):
             return
         self.tray = QSystemTrayIcon(icon, self)
         self.tray.setToolTip("Смотрюн3000")
-
-        menu = QMenu()
-        menu.addAction("Показать / Скрыть", self._toggle_tray)
-        menu.addAction("Настройки", self.open_settings)
-        menu.addSeparator()
-        menu.addAction("Выход", self.close)
-        self.tray.setContextMenu(menu)
-        self._tray_menu = menu
-
+        self._build_tray_menu()
         self.tray.activated.connect(self._on_tray_activated)
         self.tray.show()
+
+    def _build_tray_menu(self):
+        menu = QMenu()
+        menu.addAction(t('tray.show_hide'), self._toggle_tray)
+        menu.addAction(t('tray.settings'), self.open_settings)
+        menu.addSeparator()
+        menu.addAction(t('tray.quit'), self.close)
+        self.tray.setContextMenu(menu)
+        self._tray_menu = menu
 
     def _on_tray_activated(self, reason):
         if reason in (QSystemTrayIcon.Trigger, QSystemTrayIcon.DoubleClick):
@@ -429,8 +439,7 @@ class MainWindow(QWidget):
             self.hide()
             if self.tray.supportsMessages():
                 self.tray.showMessage(
-                    "Смотрюн3000",
-                    "Свёрнуто в трей. Клик по иконке или хоткей — вернуть.",
+                    "Смотрюн3000", t('tray.balloon'),
                     QSystemTrayIcon.Information, 2500)
         else:
             self.showMinimized()
@@ -582,7 +591,7 @@ class MainWindow(QWidget):
             cell.set_min_side(floor)
             frame = self.capture.latest(hwnd) if hwnd else None
             if frame is None:
-                cell.show_placeholder("…" if self.capture.available() else "WGC\nнедоступен")
+                cell.show_placeholder("…" if self.capture.available() else t('mini.unavailable'))
                 continue
             data, w, h = frame
             img = QImage(data, w, h, w * 4, QImage.Format_ARGB32)
@@ -620,6 +629,33 @@ class MainWindow(QWidget):
         self.app_settings['theme'] = theme_name
         self._save_settings()
         self.apply_theme(theme_name)
+
+    # ========== ЯЗЫК ==========
+
+    def get_language(self):
+        return self.language
+
+    def set_language(self, code):
+        """Сменить язык интерфейса: сохранить и перевести живые элементы."""
+        if code == self.language or code not in i18n.LANGUAGES:
+            return
+        self.language = code
+        self.app_settings['language'] = code
+        self._save_settings()
+        i18n.set_language(code)
+        self._retranslate()
+
+    def _retranslate(self):
+        self.title_bar.retranslate()
+        if self.tray:
+            self.tray.setToolTip("Смотрюн3000")
+            self._build_tray_menu()
+        # строки в строках/сетке — данные или собираются по t() на лету;
+        # принудительно пересобираем текущий вид
+        if self.view_mode == 'mini':
+            self._rebuild_grid(self.window_logic.windows_cache)
+        else:
+            self._force_rebuild()
 
     # ========== СПИСОК ОКОН ==========
 
@@ -700,7 +736,7 @@ class MainWindow(QWidget):
     # ========== СИГНАЛЫ ЛОГИКИ ==========
 
     def _on_error(self, message):
-        QMessageBox.critical(self, "Ошибка", message)
+        QMessageBox.critical(self, t('error.title'), message)
 
     def _on_hotkey(self, digit):
         window_data = self.window_logic.get_window_by_hotkey(digit)

@@ -1,6 +1,7 @@
 """
 Модальные диалоги: переименование, назначение хоткея, управление иконкой,
 и полноценное окно настроек с категориями (боковое меню + разделы).
+Строки — через i18n.t().
 """
 
 from PySide6.QtCore import Qt
@@ -12,6 +13,7 @@ from PySide6.QtWidgets import (
 )
 
 from themes import THEMES, VIEW_MODES
+from i18n import t, LANGUAGES
 
 
 def _title_label(text):
@@ -26,27 +28,27 @@ class RenameDialog(QDialog):
         super().__init__(parent)
         self.window_logic = window_logic
         self.window_key = window_key
-        self.setWindowTitle("Переименовать окно")
+        self.setWindowTitle(t('rename.title'))
         self.setMinimumWidth(380)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(12)
 
-        layout.addWidget(_title_label(f"Оригинальное название:\n{original_title[:120]}"))
+        layout.addWidget(_title_label(t('rename.original', title=original_title[:120])))
 
         self.edit = QLineEdit(window_logic.custom_names.get(window_key, ""))
-        self.edit.setPlaceholderText("Своё имя для окна…")
+        self.edit.setPlaceholderText(t('rename.placeholder'))
         self.edit.selectAll()
         self.edit.returnPressed.connect(self._save)
         layout.addWidget(self.edit)
 
         btns = QHBoxLayout()
-        save_btn = QPushButton("Сохранить"); save_btn.setObjectName("Primary")
+        save_btn = QPushButton(t('common.save')); save_btn.setObjectName("Primary")
         save_btn.clicked.connect(self._save)
-        del_btn = QPushButton("Удалить имя"); del_btn.setObjectName("Warn")
+        del_btn = QPushButton(t('rename.delete')); del_btn.setObjectName("Warn")
         del_btn.clicked.connect(self._delete)
-        cancel_btn = QPushButton("Отмена")
+        cancel_btn = QPushButton(t('common.cancel'))
         cancel_btn.clicked.connect(self.reject)
         btns.addWidget(save_btn); btns.addWidget(del_btn); btns.addStretch(1); btns.addWidget(cancel_btn)
         layout.addLayout(btns)
@@ -65,18 +67,18 @@ class HotkeyDialog(QDialog):
         super().__init__(parent)
         self.window_logic = window_logic
         self.window_key = window_key
-        self.setWindowTitle("Горячая клавиша")
+        self.setWindowTitle(t('hotkey.title'))
         self.setMinimumWidth(400)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(12)
 
-        layout.addWidget(_title_label(f"Окно: {original_title[:70]}"))
-        cur = current_number if current_number is not None else "не назначена"
-        accent = QLabel(f"Текущая: [{cur}]"); accent.setObjectName("Accent")
+        layout.addWidget(_title_label(t('hotkey.window', title=original_title[:70])))
+        cur = current_number if current_number is not None else t('hotkey.not_set')
+        accent = QLabel(t('hotkey.current', cur=cur)); accent.setObjectName("Accent")
         layout.addWidget(accent)
-        layout.addWidget(QLabel("Выберите цифру (0 = 10-й слот):"))
+        layout.addWidget(QLabel(t('hotkey.choose')))
 
         grid = QGridLayout()
         grid.setSpacing(6)
@@ -93,11 +95,11 @@ class HotkeyDialog(QDialog):
         layout.addLayout(grid)
 
         btns = QHBoxLayout()
-        save_btn = QPushButton("Сохранить"); save_btn.setObjectName("Primary")
+        save_btn = QPushButton(t('common.save')); save_btn.setObjectName("Primary")
         save_btn.clicked.connect(self._save)
-        remove_btn = QPushButton("Убрать хоткей"); remove_btn.setObjectName("Danger")
+        remove_btn = QPushButton(t('hotkey.remove')); remove_btn.setObjectName("Danger")
         remove_btn.clicked.connect(self._remove)
-        cancel_btn = QPushButton("Отмена")
+        cancel_btn = QPushButton(t('common.cancel'))
         cancel_btn.clicked.connect(self.reject)
         btns.addWidget(save_btn); btns.addWidget(remove_btn); btns.addStretch(1); btns.addWidget(cancel_btn)
         layout.addLayout(btns)
@@ -116,22 +118,20 @@ class HotkeyDialog(QDialog):
 
 
 class IconDialog(QDialog):
-    FILE_FILTER = "Изображения (*.png *.ico *.jpg *.jpeg *.gif *.bmp);;Все файлы (*.*)"
-
     def __init__(self, window_logic, window_key, original_title, parent=None):
         super().__init__(parent)
         self.window_logic = window_logic
         self.window_key = window_key
-        self.setWindowTitle("Иконка окна")
+        self.setWindowTitle(t('icon.title'))
         self.setMinimumWidth(360)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(12)
 
-        layout.addWidget(_title_label(f"Окно: {original_title[:70]}"))
+        layout.addWidget(_title_label(t('hotkey.window', title=original_title[:70])))
 
-        self.preview = QLabel("Иконка не задана")
+        self.preview = QLabel(t('icon.none'))
         self.preview.setObjectName("Muted")
         self.preview.setAlignment(Qt.AlignCenter)
         self.preview.setMinimumHeight(120)
@@ -139,11 +139,11 @@ class IconDialog(QDialog):
         self._load_preview()
 
         btns = QHBoxLayout()
-        choose_btn = QPushButton("Выбрать файл…"); choose_btn.setObjectName("Primary")
+        choose_btn = QPushButton(t('icon.choose')); choose_btn.setObjectName("Primary")
         choose_btn.clicked.connect(self._choose)
-        remove_btn = QPushButton("Удалить иконку"); remove_btn.setObjectName("Danger")
+        remove_btn = QPushButton(t('icon.remove')); remove_btn.setObjectName("Danger")
         remove_btn.clicked.connect(self._remove)
-        close_btn = QPushButton("Закрыть")
+        close_btn = QPushButton(t('common.close'))
         close_btn.clicked.connect(self.reject)
         btns.addWidget(choose_btn); btns.addWidget(remove_btn); btns.addStretch(1); btns.addWidget(close_btn)
         layout.addLayout(btns)
@@ -158,10 +158,10 @@ class IconDialog(QDialog):
                     pix.scaled(96, 96, Qt.KeepAspectRatio, Qt.SmoothTransformation)
                 )
                 return
-        self.preview.setText("Иконка не задана")
+        self.preview.setText(t('icon.none'))
 
     def _choose(self):
-        filename, _ = QFileDialog.getOpenFileName(self, "Выберите иконку", "", self.FILE_FILTER)
+        filename, _ = QFileDialog.getOpenFileName(self, t('icon.caption'), "", t('icon.filter'))
         if filename:
             self.window_logic.set_window_icon(self.window_key, filename)
             self.accept()
@@ -179,7 +179,7 @@ class SettingsDialog(QDialog):
         self.main_window = main_window
         self.hotkey_manager = main_window.hotkey_manager
         self._orig_mode = main_window.get_view_mode()
-        self.setWindowTitle("Настройки")
+        self.setWindowTitle(t('settings.title'))
         self.setMinimumSize(560, 440)
 
         root = QVBoxLayout(self)
@@ -189,11 +189,10 @@ class SettingsDialog(QDialog):
         body = QHBoxLayout()
         body.setSpacing(12)
 
-        # Боковое меню категорий
         self.sidebar = QListWidget()
         self.sidebar.setObjectName("SettingsSidebar")
         self.sidebar.setFixedWidth(150)
-        for name in ("Общие", "Вид", "Инфо"):
+        for name in (t('settings.cat.general'), t('settings.cat.appearance'), t('settings.cat.info')):
             self.sidebar.addItem(name)
         self.stack = QStackedWidget()
 
@@ -208,16 +207,15 @@ class SettingsDialog(QDialog):
         body.addWidget(self.stack, 1)
         root.addLayout(body)
 
-        # Кнопки внизу
         btns = QHBoxLayout()
-        save_btn = QPushButton("Сохранить"); save_btn.setObjectName("Primary")
+        save_btn = QPushButton(t('common.save')); save_btn.setObjectName("Primary")
         save_btn.clicked.connect(self._save)
-        cancel_btn = QPushButton("Отмена")
+        cancel_btn = QPushButton(t('common.cancel'))
         cancel_btn.clicked.connect(self.reject)
         btns.addStretch(1); btns.addWidget(save_btn); btns.addWidget(cancel_btn)
         root.addLayout(btns)
 
-    # ---------- Категория: Общие (хоткеи) ----------
+    # ---------- Общие ----------
     def _build_general(self):
         s = self.hotkey_manager.settings
         page = QWidget()
@@ -225,32 +223,30 @@ class SettingsDialog(QDialog):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(12)
 
-        box = QGroupBox("Горячие клавиши")
+        box = QGroupBox(t('settings.group.hotkeys'))
         form = QVBoxLayout(box)
         form.setSpacing(10)
 
-        self.enabled_cb = QCheckBox("Включить горячие клавиши")
+        self.enabled_cb = QCheckBox(t('settings.enable_hotkeys'))
         self.enabled_cb.setChecked(s.get('enabled', True))
         form.addWidget(self.enabled_cb)
 
-        self.shift_cb = QCheckBox("Использовать Shift+цифра (вместо простых цифр)")
+        self.shift_cb = QCheckBox(t('settings.use_shift'))
         self.shift_cb.setChecked(s.get('use_shift', False))
         form.addWidget(self.shift_cb)
 
-        self.feedback_cb = QCheckBox("Показывать обратную связь (круг с цифрой)")
+        self.feedback_cb = QCheckBox(t('settings.feedback'))
         self.feedback_cb.setChecked(s.get('feedback_enabled', True))
         form.addWidget(self.feedback_cb)
 
         tray_row = QHBoxLayout()
-        tray_row.addWidget(QLabel("Хоткей сворачивания в трей:"))
+        tray_row.addWidget(QLabel(t('settings.tray_hotkey')))
         self.tray_edit = QLineEdit(s.get('tray_hotkey', '<ctrl>+<f9>'))
         self.tray_edit.setPlaceholderText("<ctrl>+<f9>")
         tray_row.addWidget(self.tray_edit, 1)
         form.addLayout(tray_row)
 
-        hint = QLabel(
-            "С Ctrl работают только спец-клавиши (буквы — нет, ограничение Windows).\n"
-            "Примеры: <ctrl>+<f9>, <ctrl>+<shift>+<f10>, <alt>+<f8>")
+        hint = QLabel(t('settings.tray_hint'))
         hint.setObjectName("Muted")
         hint.setWordWrap(True)
         form.addWidget(hint)
@@ -259,50 +255,58 @@ class SettingsDialog(QDialog):
         layout.addStretch(1)
         return page
 
-    # ---------- Категория: Вид (тема / режим / иконки) ----------
+    # ---------- Вид ----------
     def _build_appearance(self):
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(12)
 
-        box = QGroupBox("Оформление")
+        box = QGroupBox(t('settings.group.appearance'))
         form = QVBoxLayout(box)
         form.setSpacing(10)
 
         theme_row = QHBoxLayout()
-        theme_row.addWidget(QLabel("Тема:"))
+        theme_row.addWidget(QLabel(t('settings.theme')))
         self.theme_combo = QComboBox()
         self._theme_keys = list(THEMES.keys())
         for key in self._theme_keys:
-            self.theme_combo.addItem(THEMES[key], key)
+            self.theme_combo.addItem(t('theme.' + key), key)
         current_theme = self.main_window.get_theme()
         if current_theme in self._theme_keys:
             self.theme_combo.setCurrentIndex(self._theme_keys.index(current_theme))
-        # живой предпросмотр темы
         self.theme_combo.currentIndexChanged.connect(
             lambda i: self.main_window.apply_theme(self._theme_keys[i]))
         theme_row.addWidget(self.theme_combo, 1)
         form.addLayout(theme_row)
 
         mode_row = QHBoxLayout()
-        mode_row.addWidget(QLabel("Режим:"))
+        mode_row.addWidget(QLabel(t('settings.mode')))
         self.mode_combo = QComboBox()
         self._mode_keys = list(VIEW_MODES.keys())
         for key in self._mode_keys:
-            self.mode_combo.addItem(VIEW_MODES[key], key)
+            self.mode_combo.addItem(t('mode.' + key), key)
         current_mode = self.main_window.get_view_mode()
         if current_mode in self._mode_keys:
             self.mode_combo.setCurrentIndex(self._mode_keys.index(current_mode))
-        # живой предпросмотр режима (как у темы)
         self.mode_combo.currentIndexChanged.connect(
             lambda i: self.main_window.preview_view_mode(self._mode_keys[i]))
         mode_row.addWidget(self.mode_combo, 1)
         form.addLayout(mode_row)
 
-        hint = QLabel("«Мини-окно» показывает живые превью всех окон сеткой "
-                      "(Windows.Graphics.Capture); масштаб — как у иконок "
-                      "(Ctrl+колесо / Ctrl+↑↓).")
+        lang_row = QHBoxLayout()
+        lang_row.addWidget(QLabel(t('settings.language')))
+        self.lang_combo = QComboBox()
+        self._lang_keys = list(LANGUAGES.keys())
+        for code in self._lang_keys:
+            self.lang_combo.addItem(LANGUAGES[code], code)
+        cur_lang = self.main_window.get_language()
+        if cur_lang in self._lang_keys:
+            self.lang_combo.setCurrentIndex(self._lang_keys.index(cur_lang))
+        lang_row.addWidget(self.lang_combo, 1)
+        form.addLayout(lang_row)
+
+        hint = QLabel(t('settings.mode_hint'))
         hint.setObjectName("Muted")
         hint.setWordWrap(True)
         form.addWidget(hint)
@@ -311,33 +315,15 @@ class SettingsDialog(QDialog):
         layout.addStretch(1)
         return page
 
-    # ---------- Категория: Инфо ----------
+    # ---------- Инфо ----------
     def _build_info(self):
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        box = QGroupBox("Управление")
+        box = QGroupBox(t('settings.group.controls'))
         inner = QVBoxLayout(box)
-        info = QLabel(
-            "<b>Переключение на окно</b><br>"
-            "• Клик по имени или по иконке — переключиться на окно<br>"
-            "• Цифры 1..9 и 0 — переключение на окно с соответствующим бейджем<br>"
-            "• Режим Shift+цифра включается в разделе «Общие»<br>"
-            "• Хоткеи работают, даже когда панель свёрнута<br><br>"
-            "<b>Трей</b><br>"
-            "• Хоткей сворачивания в трей (по умолчанию Ctrl+F9) — прячет/возвращает панель<br>"
-            "• Клик по иконке в трее — показать/скрыть; правый клик — меню<br><br>"
-            "<b>Список</b><br>"
-            "• Перетаскивание строки (за ☰) — изменить порядок<br>"
-            "• 🎨 — иконка, ⌨ — хоткей, ✎ — переименовать<br><br>"
-            "<b>Клавиши</b><br>"
-            "• F2 — настройки, F3 — обновить список (когда панель активна)<br>"
-            "• Ctrl+↑ / Ctrl+↓ — размер иконок (глобально), либо Ctrl+колесо над списком<br><br>"
-            "<b>Окно</b><br>"
-            "• Тянуть за шапку — переместить<br>"
-            "• Тянуть за любой край/угол — изменить размер"
-        )
+        info = QLabel(t('settings.info'))
         info.setObjectName("InfoText")
         info.setWordWrap(True)
         info.setTextFormat(Qt.RichText)
@@ -350,29 +336,25 @@ class SettingsDialog(QDialog):
 
     # ---------- Сохранение ----------
     def _save(self):
-        # Хоткей трея: валидируем, при ошибке оставляем прежний
         tray_hotkey = self.tray_edit.text().strip()
         if tray_hotkey and not self.hotkey_manager.is_valid_hotkey(tray_hotkey):
-            QMessageBox.warning(
-                self, "Неверный хоткей",
-                f"Комбинация «{tray_hotkey}» не распознана.\n"
-                "Оставлено прежнее значение. Пример формата: <ctrl>+<shift>+s")
-            tray_hotkey = self.hotkey_manager.settings.get('tray_hotkey', '<ctrl>+<shift>+s')
+            QMessageBox.warning(self, t('settings.invalid.title'),
+                                t('settings.invalid.msg', combo=tray_hotkey))
+            tray_hotkey = self.hotkey_manager.settings.get('tray_hotkey', '<ctrl>+<f9>')
 
-        # Хоткеи
         self.hotkey_manager.apply_settings({
             'enabled': self.enabled_cb.isChecked(),
             'use_shift': self.shift_cb.isChecked(),
             'feedback_enabled': self.feedback_cb.isChecked(),
             'tray_hotkey': tray_hotkey,
         })
-        # Вид
         self.main_window.set_theme(self._theme_keys[self.theme_combo.currentIndex()])
         self.main_window.set_view_mode(self._mode_keys[self.mode_combo.currentIndex()])
+        self.main_window.set_language(self._lang_keys[self.lang_combo.currentIndex()])
         self.accept()
 
     def reject(self):
-        # откатываем живой предпросмотр темы и режима к сохранённым
+        # откатываем живой предпросмотр темы и режима
         self.main_window.apply_theme(self.main_window.get_theme())
         self.main_window.preview_view_mode(self._orig_mode)
         super().reject()
